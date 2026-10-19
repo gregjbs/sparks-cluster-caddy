@@ -1,0 +1,267 @@
+# Dashboard Glance du homelab — https://10.0.0.206/glance/ (ou via tunnel SSH)
+# Documenté dans glance/README.md.
+# Liens cliquables RELATIFS (suivent l'origine de la page : IP directe ou tunnel).
+# check-url des monitors ABSOLUS (sonde exécutée côté serveur Glance, sur le head).
+server:
+  host: 0.0.0.0
+  port: 8082
+  base-url: /glance
+  proxied: true
+  assets-path: /app/assets
+
+theme:
+  background-color: 230 25 8
+  primary-color: 198 88 55
+  positive-color: 150 55 45
+  negative-color: 0 75 55
+  contrast-multiplier: 1.25
+  disable-picker: true
+
+pages:
+  - name: Sparks x2 Cluster
+    columns:
+      - size: small
+        widgets:
+          - type: clock
+            hour-format: 24h
+            timezones:
+              - timezone: Europe/Paris
+                label: Paris
+
+          - type: monitor
+            title: Services
+            cache: 1m
+            sites:
+              - title: Pilote cluster
+                url: /pilote
+                check-url: https://10.0.0.206/pilote
+                icon: mdi:robot
+                allow-insecure: true
+              - title: OpenFox
+                url: /
+                check-url: https://10.0.0.206
+                icon: mdi:robot
+                allow-insecure: true
+              - title: ajean
+                url: /ajean/
+                check-url: https://10.0.0.206/ajean/
+                icon: mdi:apps
+                allow-insecure: true
+              - title: code-server
+                url: /code/
+                check-url: https://10.0.0.206/code/login
+                icon: di:code-server
+                allow-insecure: true
+              - title: Cluster vLLM
+                url: /vllm-cluster/health
+                check-url: https://10.0.0.206/vllm-cluster/health
+                icon: di:vllm
+                allow-insecure: true
+              - title: Glance
+                url: /glance/
+                check-url: https://10.0.0.206/glance/
+                icon: sh:glance
+                allow-insecure: true
+
+          - type: bookmarks
+            title: Applications
+            groups:
+              - title: Services
+                links:
+                  - title: OpenFox
+                    url: /
+                    description: Agent à la racine du site
+                    icon: mdi:robot
+                  - title: ajean
+                    url: /ajean/
+                    description: App perso
+                    icon: mdi:apps
+                  - title: code-server
+                    url: /code/
+                    description: VS Code dans le navigateur
+                    icon: di:code-server
+                  - title: llama-server
+                    url: /llama/
+                    description: API / UI Ollama-like
+                    icon: di:ollama
+
+      - size: full
+        widgets:
+          - type: custom-api
+            title: Sparks (cluster DeepSeek-V4-Flash)
+            cache: 30s
+            url: http://127.0.0.1:8082/assets/cluster-health.json
+            template: |
+              <div class="flex justify-between">
+                <div style="flex:1; margin:0 4px; padding:12px; border-radius:10px; background:rgba(255,255,255,0.06)">
+                  <div class="flex justify-between">
+                    <span class="size-h5 color-highlight">HEAD — Spark 1</span>
+                    {{ if .JSON.Bool "head.up" }}<span class="size-h6 color-positive">● UP</span>{{ else }}<span class="size-h6 color-negative">● DOWN</span>{{ end }}
+                  </div>
+                  <div class="size-h6 color-paragraph text-truncate">{{ .JSON.String "head.hostname" }} · {{ .JSON.String "head.ip" }}</div>
+                  <div class="flex justify-between size-h6">
+                    <span>GPU {{ if gt (.JSON.Float "head.gpu_temp_c") 0.0 }}<b class="color-highlight">{{ .JSON.Int "head.gpu_temp_c" }}°C</b>{{ else }}—{{ end }}</span>
+                    <span>util {{ if gt (.JSON.Float "head.gpu_util_pct") 0.0 }}<b class="color-highlight">{{ .JSON.Int "head.gpu_util_pct" }}%</b>{{ else }}—{{ end }}</span>
+                  </div>
+                  <div class="size-h6 color-paragraph">power {{ if gt (.JSON.Float "head.power_w") 0.0 }}{{ .JSON.Float "head.power_w" | printf "%.1f" }} W{{ else }}—{{ end }}</div>
+                </div>
+                <div style="flex:1; margin:0 4px; padding:12px; border-radius:10px; background:rgba(255,255,255,0.06)">
+                  <div class="flex justify-between">
+                    <span class="size-h5 color-highlight">WORKER — Spark 2</span>
+                    {{ if .JSON.Bool "worker.up" }}<span class="size-h6 color-positive">● UP</span>{{ else }}<span class="size-h6 color-negative">● DOWN</span>{{ end }}
+                  </div>
+                  <div class="size-h6 color-paragraph text-truncate">{{ .JSON.String "worker.hostname" }} · {{ .JSON.String "worker.ip" }}</div>
+                  <div class="flex justify-between size-h6">
+                    <span>GPU {{ if gt (.JSON.Float "worker.gpu_temp_c") 0.0 }}<b class="color-highlight">{{ .JSON.Int "worker.gpu_temp_c" }}°C</b>{{ else }}—{{ end }}</span>
+                    <span>util {{ if gt (.JSON.Float "worker.gpu_util_pct") 0.0 }}<b class="color-highlight">{{ .JSON.Int "worker.gpu_util_pct" }}%</b>{{ else }}—{{ end }}</span>
+                  </div>
+                  <div class="size-h6 color-paragraph">ping {{ if gt (.JSON.Float "worker.ping_ms") 0.0 }}{{ .JSON.Float "worker.ping_ms" | printf "%.1f" }} ms{{ else }}—{{ end }}</div>
+                </div>
+              </div>
+
+          - type: custom-api
+            title: Cluster vLLM
+            cache: 30s
+            url: http://127.0.0.1:8082/assets/cluster-health.json
+            template: |
+              <div class="flex justify-between text-center">
+                <div>
+                  <div class="size-h3 {{ if .JSON.Bool "cluster.api_up" }}color-positive{{ else }}color-negative{{ end }}">
+                    {{ if .JSON.Bool "cluster.api_up" }}EN LIGNE{{ else }}HORS LIGNE{{ end }}
+                  </div>
+                  <div class="size-h6">API</div>
+                </div>
+                <div>
+                  <div class="size-h3 color-highlight">{{ .JSON.Int "cluster.requests_running" }}</div>
+                  <div class="size-h6">REQUÊTES</div>
+                </div>
+                <div>
+                  <div class="size-h3 color-highlight">{{ .JSON.Int "cluster.requests_waiting" }}</div>
+                  <div class="size-h6">EN ATTENTE</div>
+                </div>
+                <div>
+                  <div class="size-h3 color-highlight">{{ .JSON.Float "cluster.tokens_per_sec" | printf "%.1f" }}</div>
+                  <div class="size-h6">TOK/S</div>
+                </div>
+              </div>
+              <div class="flex justify-between size-h6 color-paragraph">
+                <span class="text-truncate">{{ .JSON.String "cluster.model" }}</span>
+                <span>Cache hit {{ if .JSON.Exists "cluster.prefix_cache_hit_rate" }}{{ .JSON.Float "cluster.prefix_cache_hit_rate" | printf "%.0f" }}%{{ else }}—{{ end }}</span>
+                <span>DSpark {{ if .JSON.Exists "cluster.spec_acceptance_pct" }}{{ .JSON.Float "cluster.spec_acceptance_pct" | printf "%.0f" }}%{{ else }}—{{ end }}</span>
+              </div>
+              <div class="size-h6 color-paragraph">MAJ <span {{ (.JSON.String "updated_at") | parseTime "RFC3339" | toRelativeTime }}></span></div>
+
+          - type: custom-api
+            title: Pilote du cluster
+            title-url: /glance/pilote
+            cache: 10s
+            # État lu côté serveur par Glance (réseau host) ; actions et suivi en direct : page « Pilote ».
+            url: http://127.0.0.1:8095/api/etat
+            template: |
+              {{ $e := .JSON.String "deepseek.etat" }}
+              <div class="flex justify-between text-center">
+                <div>
+                  <div class="size-h3 {{ if eq $e "pret" }}color-positive{{ else if eq $e "anomalie" }}color-negative{{ else }}color-highlight{{ end }}">
+                    {{ if eq $e "pret" }}PRÊT{{ else if eq $e "demarrage" }}DÉMARRAGE…{{ else if eq $e "arrete" }}ARRÊTÉ{{ else }}ANOMALIE{{ end }}
+                  </div>
+                  <div class="size-h6">DEEPSEEK</div>
+                </div>
+                <div>
+                  <div class="size-h3 {{ if .JSON.Bool "qwen.sante" }}color-positive{{ else if .JSON.Bool "qwen.processus" }}color-highlight{{ else }}color-subdue{{ end }}">
+                    {{ if .JSON.Bool "qwen.sante" }}PRÊT{{ else if .JSON.Bool "qwen.processus" }}DÉMARRAGE…{{ else }}ARRÊTÉ{{ end }}
+                  </div>
+                  <div class="size-h6">VISION (QWEN)</div>
+                </div>
+                <div>
+                  <div class="size-h3 {{ if lt (.JSON.Float "memoire.head") (.JSON.Float "memoire.seuil") }}color-negative{{ else }}color-highlight{{ end }}">{{ .JSON.Float "memoire.head" | printf "%.1f" }}</div>
+                  <div class="size-h6">GO LIBRES HEAD</div>
+                </div>
+                <div>
+                  <div class="size-h3 {{ if lt (.JSON.Float "memoire.worker") (.JSON.Float "memoire.seuil") }}color-negative{{ else }}color-highlight{{ end }}">{{ .JSON.Float "memoire.worker" | printf "%.1f" }}</div>
+                  <div class="size-h6">GO LIBRES WORKER</div>
+                </div>
+              </div>
+              <div class="flex justify-between size-h6 color-paragraph">
+                <span class="text-truncate">{{ with .JSON.String "deepseek.libelle" }}{{ . }}{{ else }}{{ if eq $e "arrete" }}aucune variante{{ else }}variante inconnue{{ end }}{{ end }}</span>
+                {{ with .JSON.String "action.encours.nom" }}<span class="color-highlight">⟳ {{ . }}</span>{{ end }}
+                <a class="color-primary" href="/glance/pilote">Ouvrir le pilote →</a>
+              </div>
+
+          - type: monitor
+            title: Monitor du cluster
+            cache: 1m
+            style: compact
+            sites:
+              - title: API OpenAI
+                url: /vllm-cluster/health
+                check-url: https://10.0.0.206/vllm-cluster/health
+                allow-insecure: true
+              - title: Métriques
+                url: /vllm-cluster/metrics
+                check-url: https://10.0.0.206/vllm-cluster/metrics
+                allow-insecure: true
+                alt-status-codes:
+                  - 401
+
+      - size: small
+        widgets:
+          - type: bookmarks
+            title: Cluster & API
+            groups:
+              - title: DeepSeek-V4-Flash
+                links:
+                  - title: API OpenAI
+                    url: /vllm-cluster/v1
+                    description: Base URL compatible OpenAI
+                    icon: di:vllm
+                  - title: API OpenAI - Vision
+                    url: /vision/v1
+                    description: Base URL compatible OpenAI for vision fallback model
+                    icon: di:vllm
+                  - title: Modèles
+                    url: /vllm-cluster/v1/models
+                    description: GET /v1/models (clé requise)
+                    icon: mdi:database-search
+                  - title: Santé
+                    url: /vllm-cluster/health
+                    description: GET /health — ouvert
+                    icon: mdi:heart-pulse
+                  - title: Métriques
+                    url: /vllm-cluster/metrics
+                    description: Prometheus — clé requise
+                    icon: mdi:chart-line
+                  - title: État brut (JSON)
+                    url: /glance/assets/cluster-health.json
+                    description: Données du dashboard
+                    icon: mdi:file-code-outline
+
+          - type: bookmarks
+            title: Proxy & outils
+            groups:
+              - title: Accès
+                links:
+                  - title: Glance
+                    url: /glance/
+                    description: Ce dashboard
+                    icon: sh:glance
+                  - title: CA racine
+                    url: /glance/assets/ca-root.crt
+                    description: Certificat à truster (rafraîchir si la CA change)
+                    icon: mdi:shield-lock-outline
+                  - title: Documentation Glance
+                    url: https://github.com/glanceapp/glance
+                    description: Docs du dashboard (GitHub)
+                    icon: si:github
+
+  # Pilote du cluster (~/work/ia/cluster-pilote) intégré en iframe, mode « intégré » (thème de ce dashboard).
+  # Même origine que Glance : le pilote n'accepte d'être intégré que par une page de la même origine.
+  - name: Pilote
+    slug: pilote
+    width: wide
+    columns:
+      - size: full
+        widgets:
+          - type: iframe
+            title: Pilote du cluster
+            source: /pilote/?integre=1
+            height: 1250

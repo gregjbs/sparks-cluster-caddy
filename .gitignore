@@ -1,0 +1,2 @@
+# Secrets locaux (identifiant et hash basic_auth de Caddy) : jamais dans git
+.env

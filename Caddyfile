@@ -1,0 +1,107 @@
+https://10.0.0.206, localhost, promaxgb10-host, promaxgb10-host.local {
+	# certificats auto-signés (CA interne de Caddy) — pas de domaine
+	tls internal
+
+	# Authentification basic_auth sur TOUTES les routes (directive évaluée avant les handle), sauf :
+	# - connexions venant du head lui-même (tunnels SSH, sondes Glance, scripts locaux) ;
+	# - API /vllm-cluster et /vision, déjà protégées par clé (basic_auth et clé d'API utiliseraient
+	#   le même en-tête Authorization).
+	# Identifiant et hash bcrypt dans .env (hors git), lus au démarrage du conteneur (env_file).
+	# Ne pas déclarer trusted_proxies : remote_ip doit rester l'adresse TCP réelle.
+	@protege {
+		not remote_ip 127.0.0.0/8 ::1 10.0.0.206/32
+		not path /vllm-cluster/* /vision/*
+	}
+	basic_auth @protege {
+		{$PROXY_USER} {$PROXY_HASH}
+	}
+
+	# /ajean sans slash -> /ajean/ (sinon le navigateur résout les assets
+	# relatifs depuis la racine et ils ne matchent plus la route /ajean*)
+	redir /ajean /ajean/
+
+	# ajean sert sa racine à / -> on retire le préfixe /ajean
+	handle /ajean* {
+		uri strip_prefix /ajean
+		reverse_proxy 10.0.0.206:8090
+	}
+
+	# llama-server est déjà monté sous /llama -> on garde le préfixe
+	handle /llama* {
+		reverse_proxy 10.0.0.206:8080
+	}
+
+	# code-server
+	redir /code /code/
+	handle /code* {
+			uri strip_prefix /code
+			reverse_proxy 10.0.0.206:8081 {
+				header_up Host {http.request.host}
+				header_up X-Real-IP {http.request.remote.host}
+				header_up X-Forwarded-For {http.request.remote.host}
+				header_up X-Forwarded-Proto {http.request.scheme}
+			}
+	}
+
+	# vLLM du cluster 2 Sparks (DeepSeek-V4-Flash, API compatible OpenAI) -> on retire le préfixe :
+	# vLLM sert son API à la racine (/v1/..., /health, /metrics). La clé d'API reste vérifiée par vLLM
+	# (en-tête Authorization transmis tel quel). Base URL côté client : https://10.0.0.206/vllm-cluster/v1
+	# flush_interval -1 : réponses en streaming (SSE) transmises token par token, sans mise en tampon.
+	redir /vllm-cluster /vllm-cluster/
+	handle /vllm-cluster/* {
+		uri strip_prefix /vllm-cluster
+		reverse_proxy 10.0.0.206:8000 {
+			flush_interval -1
+		}
+	}
+
+	# Glance (dashboard homelab) -> /glance. Glance est configuré avec base-url /glance
+	# (server.base-url dans glance/glance.yml) : handle_path retire le préfixe avant
+	# de forwarder, et Glance sert ses assets sous /glance/assets/... correctement.
+	redir /glance /glance/
+	handle_path /glance/* {
+		reverse_proxy 127.0.0.1:8082
+	}
+
+	# Qwen3.5-2B (vision de secours de DeepSeek) : llama-server sur le WORKER, joint par le lien 200G
+	# (192.168.100.11:8001, couvert par NO_PROXY=192.168.100.0/24) -> on retire le préfixe : llama-server sert
+	# son API à la racine (/v1/..., /health). La clé d'API reste vérifiée par llama-server.
+	# Base URL côté client : https://10.0.0.206/vision/v1 (modèle qwen3.5-2b).
+	redir /vision /vision/
+	handle /vision/* {
+		uri strip_prefix /vision
+		reverse_proxy 192.168.100.11:8001 {
+			flush_interval -1
+		}
+	}
+
+	# Pilote du cluster (~/work/ia/cluster-pilote) : arrêt/relance/variantes de DeepSeek, Qwen (vision).
+	# pilote.py écoute sur 127.0.0.1:8095 et accepte les chemins avec ou sans /pilote. PAS d'authentification
+	# (décision du 12/10) : toute machine du réseau local peut arrêter le modèle. Pour ajouter un mot de passe :
+	# voir cluster-pilote/README.md (basic_auth).
+	redir /pilote /pilote/
+	handle /pilote/* {
+		uri strip_prefix /pilote
+		reverse_proxy 127.0.0.1:8095
+	}
+
+	# OpenFox (port 10369) -> servi à la RACINE du site.
+	# L'app est compilée pour la racine (assets /assets/..., API /api/..., WebSocket /ws/...) et ne sait pas
+	# fonctionner sous un sous-chemin. Conséquence : toute adresse non prise par les routes ci-dessus
+	# (/ajean, /llama, /code, /vllm-cluster) est envoyée à OpenFox. Une future application devra avoir son propre préfixe.
+	#
+	# /sw.js -> 404 : OpenFox enregistre un service worker de portée "/" dont la règle de navigation
+	# (Workbox NavigationRoute, sans liste d'exclusion) renverrait SON index.html pour TOUTE page du site
+	# ouverte ensuite dans le navigateur (/ajean/, /code/, ...). En refusant /sw.js, l'enregistrement échoue
+	# sans conséquence : OpenFox fonctionne normalement, seul le mode application installable / hors ligne est perdu.
+	handle /sw.js {
+		respond 404
+	}
+	# flush_interval -1 : réponses en streaming transmises au fil de l'eau (le WebSocket est géré automatiquement).
+	handle {
+		reverse_proxy 127.0.0.1:10369 {
+			flush_interval -1
+		}
+	}
+}
+

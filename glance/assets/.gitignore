@@ -1,0 +1,3 @@
+# Artéfacts runtime (régénérés par glance/cluster-health.py via cron 30 s)
+cluster-health.json
+.state.json

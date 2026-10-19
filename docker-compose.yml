@@ -1,0 +1,32 @@
+services:
+  caddy:
+    image: caddy:2
+    container_name: caddy-proxy
+    restart: unless-stopped
+    # Identifiant et hash bcrypt du basic_auth (PROXY_USER, PROXY_HASH), hors git, droits 600.
+    # Caddy ne lit l'environnement qu'au démarrage : après modification, `docker compose up -d caddy`.
+    env_file: .env
+    # réseau hôte : pas de DNAT, Caddy voit la vraie IP de destination
+    # (indispensable : les navigateurs n'envoient pas de SNI pour les IPs,
+    #  Caddy doit matcher le certificat sur l'IP, pas sur l'IP du bridge)
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  # Dashboard homelab, servi par Caddy sur /glance (base-url côté Glance).
+  # Réseau host (comme Caddy) : Glance atteint 127.0.0.1:8000 (vLLM) et sert
+  # le JSON de santé généré par glance/cluster-health.py (cron 30 s).
+  glance:
+    image: glanceapp/glance:v0.8.6
+    container_name: glance
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./glance:/app/config
+      - ./glance/assets:/app/assets
+
+volumes:
+  caddy-data:
+  caddy-config:
